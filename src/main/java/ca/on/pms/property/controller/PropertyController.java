@@ -24,7 +24,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PropertyController {
 
-    private final PropertyService propertyService = null;
+	private final PropertyService propertyService;
 
     @PostMapping
     public PropertyResponse create(@RequestBody PropertyCreateRequest request) {
