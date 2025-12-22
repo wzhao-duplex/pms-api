@@ -1,0 +1,29 @@
+spring:
+    datasource:
+        url: jdbc:postgresql://db.t4g.micro:5432/pms-db
+        username: pms_user
+        password: postgres123!
+        driver-class-name: org.postgresql.Driver
+
+    jpa:
+        hibernate:
+            ddl-auto: validate
+        show-sql: true
+        properties:
+            hibernate:
+                format_sql: true
+
+    flyway:
+        enabled: true
+        baseline-on-migrate: true
+        user: postgres
+        password: postgres123!
+
+aws:
+    region: us-east-2
+    s3:
+        bucket: my-pms-bucket-2025
+
+logging:
+    level:
+        org.flywaydb: INFO
