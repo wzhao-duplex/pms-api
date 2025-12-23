@@ -1,6 +1,6 @@
 spring:
     datasource:
-        url: jdbc:postgresql://db.t4g.micro:5432/pms-db
+        url: jdbc:postgresql://pms-db.cubow0oekmh7.us-east-1.rds.amazonaws.com:5432/pms-db
         username: pms_user
         password: postgres123!
         driver-class-name: org.postgresql.Driver
@@ -16,7 +16,7 @@ spring:
     flyway:
         enabled: true
         baseline-on-migrate: true
-        user: postgres
+        user: pms_user
         password: postgres123!
 
 aws:
