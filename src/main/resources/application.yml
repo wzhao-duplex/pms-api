@@ -19,7 +19,7 @@ spring:
     flyway:
         enabled: true
         baseline-on-migrate: true
-        user: postgres
+        user: pms_user
         password: postgres123!
 
 aws:
