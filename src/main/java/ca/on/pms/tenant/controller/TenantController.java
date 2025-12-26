@@ -30,6 +30,11 @@ public class TenantController {
 
 	private final TenantService tenantService;
 
+	@GetMapping
+	public ResponseEntity<List<TenantDto>> listAll() {
+		return ResponseEntity.ok(tenantService.listAll());
+	}
+
 	@PostMapping
 	public ResponseEntity<TenantDto> create(@RequestBody TenantDto dto) {
 		return ResponseEntity.ok(tenantService.createTenant(dto));

@@ -28,23 +28,20 @@ public class UserEntity {
     @Column(name = "email", nullable = false, length = 255)
     private String email;
 
+    @Column(name = "password_hash", nullable = false)
+    private String passwordHash; // New Field
+
     @Column(name = "full_name", nullable = false, length = 255)
     private String fullName;
 
-    /**
-     * Example values:
-     *  - OWNER
-     *  - AGENT
-     *  - ADMIN
-     */
     @Column(name = "role", nullable = false, length = 50)
     private String role;
 
-    /**
-     * ACTIVE / INACTIVE / LOCKED
-     */
     @Column(name = "status", length = 50)
     private String status;
+    
+    @Column(name = "org_id")
+    private UUID orgId; // New Field: The tenant this user belongs to
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

@@ -9,13 +9,14 @@ import ca.on.pms.property.dto.PropertyUpdateRequest;
 
 public interface PropertyService {
 
-    PropertyResponse create(PropertyCreateRequest request);
+	PropertyResponse create(PropertyCreateRequest request);
 
-    PropertyResponse update(UUID propertyId, PropertyUpdateRequest request);
+	PropertyResponse update(UUID propertyId, PropertyUpdateRequest request);
 
-    PropertyResponse getById(UUID propertyId);
+	PropertyResponse getById(UUID propertyId);
 
-    List<PropertyResponse> listByOrg(UUID orgId);
+	// Renamed from listByOrg(UUID orgId) to reflect security context usage
+	List<PropertyResponse> listPropertiesForCurrentUser();
 
-    void delete(UUID propertyId);
+	void delete(UUID propertyId);
 }

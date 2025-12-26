@@ -9,12 +9,14 @@ import java.util.stream.Collectors;
 
 import javax.crypto.SecretKey;
 
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import ca.on.pms.exception.ResourceNotFoundException;
 import ca.on.pms.property.repository.PropertyRepository;
+import ca.on.pms.security.UserPrincipal;
 import ca.on.pms.security.crypto.AesEncryptionUtil;
 import ca.on.pms.storage.S3Service;
 import ca.on.pms.tenant.dto.DownloadedFile;
@@ -36,6 +38,12 @@ public class TenantServiceImpl implements TenantService {
 	private final TenantDocumentRepository tenantDocumentRepository;
 	private final PropertyRepository propertyRepository;
 	private final S3Service s3Service;
+
+	// Helper to get current user (Duplicate this helper or move to a shared
+	// Utility)
+	private UserPrincipal getCurrentUser() {
+		return (UserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+	}
 
 	@Override
 	public TenantDto createTenant(TenantDto dto) {
@@ -71,6 +79,16 @@ public class TenantServiceImpl implements TenantService {
 
 	@Override
 	@Transactional(readOnly = true)
+	public List<TenantDto> listAll() {
+		UserPrincipal user = getCurrentUser();
+
+		// Fetch tenants belonging to the user's organization
+		return tenantRepository.findByProperty_Organization_OrgId(user.getOrgId()).stream().map(this::toDto)
+				.collect(Collectors.toList());
+	}
+
+	@Override
+	@Transactional(readOnly = true)
 	public TenantDto getTenantById(UUID tenantId) {
 		return tenantRepository.findById(tenantId).map(this::toDto)
 				.orElseThrow(() -> new RuntimeException("Tenant not found"));
@@ -96,16 +114,9 @@ public class TenantServiceImpl implements TenantService {
 			String s3Key = s3Service.uploadFile(encrypted.encryptedData(), file.getOriginalFilename());
 
 			// 3️⃣ Persist metadata
-			TenantDocumentEntity entity = TenantDocumentEntity.builder()
-			        .tenant(tenant)
-			        .documentType(documentType)
-			        .s3Key(s3Key)
-			        .encryptedKey(encryptedKey)
-			        .originalFileName(file.getOriginalFilename())
-			        .contentType(file.getContentType())
-			        .fileSize(file.getSize())
-			        .uploadedAt(Instant.now())
-			        .build();
+			TenantDocumentEntity entity = TenantDocumentEntity.builder().tenant(tenant).documentType(documentType)
+					.s3Key(s3Key).encryptedKey(encryptedKey).originalFileName(file.getOriginalFilename())
+					.contentType(file.getContentType()).fileSize(file.getSize()).uploadedAt(Instant.now()).build();
 
 			tenantDocumentRepository.save(entity);
 
