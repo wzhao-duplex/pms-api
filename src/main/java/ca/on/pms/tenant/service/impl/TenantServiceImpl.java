@@ -9,12 +9,14 @@ import java.util.stream.Collectors;
 
 import javax.crypto.SecretKey;
 
+import org.springframework.security.access.AccessDeniedException; // ✅ Standard Spring Security Exception
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import ca.on.pms.exception.ResourceNotFoundException;
+import ca.on.pms.property.entity.PropertyEntity;
 import ca.on.pms.property.repository.PropertyRepository;
 import ca.on.pms.security.UserPrincipal;
 import ca.on.pms.security.crypto.AesEncryptionUtil;
@@ -39,17 +41,23 @@ public class TenantServiceImpl implements TenantService {
 	private final PropertyRepository propertyRepository;
 	private final S3Service s3Service;
 
-	// Helper to get current user (Duplicate this helper or move to a shared
-	// Utility)
 	private UserPrincipal getCurrentUser() {
 		return (UserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
 	}
 
+	// =================================================================
+	// CREATE
+	// =================================================================
 	@Override
 	public TenantDto createTenant(TenantDto dto) {
-		var property = propertyRepository.findById(dto.getPropertyId())
-				.orElseThrow(() -> new RuntimeException("Property not found"));
+		// 1. Fetch Property
+		PropertyEntity property = propertyRepository.findById(dto.getPropertyId())
+				.orElseThrow(() -> new ResourceNotFoundException("Property not found"));
 
+		// 2. ✅ SECURITY CHECK: Ensure Property belongs to User's Org
+		validatePropertyAccess(property);
+
+		// 3. Save
 		TenantEntity tenant = TenantEntity.builder().property(property).fullName(dto.getFullName())
 				.phone(dto.getPhone()).email(dto.getEmail()).leaseStart(dto.getLeaseStart()).leaseEnd(dto.getLeaseEnd())
 				.monthlyRent(dto.getMonthlyRent()).createdAt(LocalDateTime.now()).build();
@@ -57,10 +65,16 @@ public class TenantServiceImpl implements TenantService {
 		return toDto(tenantRepository.save(tenant));
 	}
 
+	// =================================================================
+	// UPDATE
+	// =================================================================
 	@Override
 	public TenantDto updateTenant(UUID tenantId, TenantDto dto) {
 		TenantEntity tenant = tenantRepository.findById(tenantId)
-				.orElseThrow(() -> new RuntimeException("Tenant not found"));
+				.orElseThrow(() -> new ResourceNotFoundException("Tenant not found"));
+
+		// ✅ SECURITY CHECK
+		validateTenantAccess(tenant);
 
 		tenant.setFullName(dto.getFullName());
 		tenant.setPhone(dto.getPhone());
@@ -72,60 +86,122 @@ public class TenantServiceImpl implements TenantService {
 		return toDto(tenantRepository.save(tenant));
 	}
 
+	// =================================================================
+	// DELETE
+	// =================================================================
 	@Override
 	public void deleteTenant(UUID tenantId) {
-		tenantRepository.deleteById(tenantId);
+		TenantEntity tenant = tenantRepository.findById(tenantId)
+				.orElseThrow(() -> new ResourceNotFoundException("Tenant not found"));
+
+		// ✅ SECURITY CHECK
+		validateTenantAccess(tenant);
+
+		tenantRepository.delete(tenant);
 	}
 
+	// =================================================================
+	// GET ONE
+	// =================================================================
+	@Override
+	@Transactional(readOnly = true)
+	public TenantDto getTenantById(UUID tenantId) {
+		TenantEntity tenant = tenantRepository.findById(tenantId)
+				.orElseThrow(() -> new ResourceNotFoundException("Tenant not found"));
+
+		// ✅ SECURITY CHECK
+		validateTenantAccess(tenant);
+
+		return toDto(tenant);
+	}
+
+	// =================================================================
+	// LIST ALL (By Org)
+	// =================================================================
 	@Override
 	@Transactional(readOnly = true)
 	public List<TenantDto> listAll() {
 		UserPrincipal user = getCurrentUser();
-
-		// Fetch tenants belonging to the user's organization
+		// Securely fetch only tenants belonging to user's org
 		return tenantRepository.findByProperty_Organization_OrgId(user.getOrgId()).stream().map(this::toDto)
 				.collect(Collectors.toList());
 	}
 
-	@Override
-	@Transactional(readOnly = true)
-	public TenantDto getTenantById(UUID tenantId) {
-		return tenantRepository.findById(tenantId).map(this::toDto)
-				.orElseThrow(() -> new RuntimeException("Tenant not found"));
-	}
-
+	// =================================================================
+	// LIST BY PROPERTY
+	// =================================================================
 	@Override
 	@Transactional(readOnly = true)
 	public List<TenantDto> listByProperty(UUID propertyId) {
+		// 1. Fetch Property to check ownership first
+		PropertyEntity property = propertyRepository.findById(propertyId)
+				.orElseThrow(() -> new ResourceNotFoundException("Property not found"));
+
+		// ✅ SECURITY CHECK
+		validatePropertyAccess(property);
+
 		return tenantRepository.findByProperty_PropertyId(propertyId).stream().map(this::toDto)
 				.collect(Collectors.toList());
 	}
 
+	// =================================================================
+	// UPLOAD DOCUMENT
+	// =================================================================
 	@Override
 	public TenantDocumentResponse uploadDocument(UUID tenantId, MultipartFile file, String documentType) {
 		TenantEntity tenant = tenantRepository.findById(tenantId)
 				.orElseThrow(() -> new ResourceNotFoundException("Tenant not found"));
 
+		// ✅ SECURITY CHECK
+		validateTenantAccess(tenant);
+
 		try {
 			AesEncryptionUtil.EncryptionResult encrypted = AesEncryptionUtil.encrypt(file.getBytes());
-
 			String encryptedKey = encrypted.base64Key() + ":" + Base64.getEncoder().encodeToString(encrypted.iv());
-
 			String s3Key = s3Service.uploadFile(encrypted.encryptedData(), file.getOriginalFilename());
 
-			// 3️⃣ Persist metadata
 			TenantDocumentEntity entity = TenantDocumentEntity.builder().tenant(tenant).documentType(documentType)
 					.s3Key(s3Key).encryptedKey(encryptedKey).originalFileName(file.getOriginalFilename())
 					.contentType(file.getContentType()).fileSize(file.getSize()).uploadedAt(Instant.now()).build();
 
 			tenantDocumentRepository.save(entity);
-
 			return TenantDocumentResponse.from(entity);
 
 		} catch (Exception e) {
 			throw new RuntimeException("Document upload failed", e);
 		}
 	}
+
+	// =================================================================
+	// DOWNLOAD DOCUMENT
+	// =================================================================
+	@Override
+	@Transactional(readOnly = true)
+	public DownloadedFile downloadTenantDocument(UUID documentId) {
+		TenantDocumentEntity doc = tenantDocumentRepository.findById(documentId)
+				.orElseThrow(() -> new ResourceNotFoundException("Document not found"));
+
+		// ✅ SECURITY CHECK (Traverse: Doc -> Tenant -> Property -> Org)
+		validateTenantAccess(doc.getTenant());
+
+		try {
+			String[] parts = doc.getEncryptedKey().split(":");
+			SecretKey aesKey = AesEncryptionUtil.decodeKey(parts[0]);
+			byte[] iv = Base64.getDecoder().decode(parts[1]);
+
+			byte[] encryptedBytes = s3Service.downloadFile(doc.getS3Key());
+			byte[] decrypted = AesEncryptionUtil.decrypt(encryptedBytes, aesKey, iv);
+
+			return new DownloadedFile(decrypted, doc.getOriginalFileName(), doc.getContentType());
+
+		} catch (Exception e) {
+			throw new RuntimeException("Failed to decrypt document", e);
+		}
+	}
+
+	// =================================================================
+	// HELPERS
+	// =================================================================
 
 	private TenantDto toDto(TenantEntity tenant) {
 		return TenantDto.builder().tenantId(tenant.getTenantId()).propertyId(tenant.getProperty().getPropertyId())
@@ -134,29 +210,21 @@ public class TenantServiceImpl implements TenantService {
 				.build();
 	}
 
-	@Override
-	@Transactional(readOnly = true)
-	public DownloadedFile downloadTenantDocument(UUID documentId) {
-
-		TenantDocumentEntity doc = tenantDocumentRepository.findById(documentId)
-				.orElseThrow(() -> new ResourceNotFoundException("Document not found"));
-
-		try {
-			// 1️⃣ Extract AES key + IV
-			String[] parts = doc.getEncryptedKey().split(":");
-			SecretKey aesKey = AesEncryptionUtil.decodeKey(parts[0]);
-			byte[] iv = Base64.getDecoder().decode(parts[1]);
-
-			// 2️⃣ Download encrypted data
-			byte[] encryptedBytes = s3Service.downloadFile(doc.getS3Key());
-
-			// 3️⃣ Decrypt
-			byte[] decrypted = AesEncryptionUtil.decrypt(encryptedBytes, aesKey, iv);
-
-			return new DownloadedFile(decrypted, doc.getOriginalFileName(), doc.getContentType());
-
-		} catch (Exception e) {
-			throw new RuntimeException("Failed to decrypt document", e);
+	/**
+	 * Ensures the property belongs to the logged-in user's organization.
+	 */
+	private void validatePropertyAccess(PropertyEntity property) {
+		UserPrincipal currentUser = getCurrentUser();
+		if (!property.getOrganization().getOrgId().equals(currentUser.getOrgId())) {
+			throw new AccessDeniedException("You do not have permission to access this property.");
 		}
+	}
+
+	/**
+	 * Ensures the tenant belongs to a property owned by the logged-in user's
+	 * organization.
+	 */
+	private void validateTenantAccess(TenantEntity tenant) {
+		validatePropertyAccess(tenant.getProperty());
 	}
 }

@@ -6,21 +6,14 @@ import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PutMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*; // Simplified imports
 import org.springframework.web.multipart.MultipartFile;
 
 import ca.on.pms.tenant.dto.DownloadedFile;
 import ca.on.pms.tenant.dto.TenantDocumentResponse;
 import ca.on.pms.tenant.dto.TenantDto;
 import ca.on.pms.tenant.service.TenantService;
+import jakarta.validation.Valid; // ✅ Import this
 import lombok.RequiredArgsConstructor;
 
 @RestController
@@ -36,12 +29,12 @@ public class TenantController {
 	}
 
 	@PostMapping
-	public ResponseEntity<TenantDto> create(@RequestBody TenantDto dto) {
+	public ResponseEntity<TenantDto> create(@Valid @RequestBody TenantDto dto) {
 		return ResponseEntity.ok(tenantService.createTenant(dto));
 	}
 
 	@PutMapping("/{id}")
-	public ResponseEntity<TenantDto> update(@PathVariable UUID id, @RequestBody TenantDto dto) {
+	public ResponseEntity<TenantDto> update(@PathVariable UUID id, @Valid @RequestBody TenantDto dto) {
 		return ResponseEntity.ok(tenantService.updateTenant(id, dto));
 	}
 
@@ -69,12 +62,9 @@ public class TenantController {
 
 	@GetMapping("/documents/{id}/download")
 	public ResponseEntity<byte[]> downloadTenantDocument(@PathVariable UUID id) {
-
 		DownloadedFile file = tenantService.downloadTenantDocument(id);
-
 		return ResponseEntity.ok()
 				.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.fileName() + "\"")
 				.contentType(MediaType.parseMediaType(file.contentType())).body(file.data());
 	}
-
 }
