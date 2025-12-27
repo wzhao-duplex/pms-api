@@ -12,6 +12,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.PrePersist;
 import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -48,5 +49,13 @@ public class PropertyEntity {
 	private BigDecimal selfUsePercent;
 	private String managementCompany;
 
+	@Column(name = "created_at", updatable = false)
 	private LocalDateTime createdAt;
+
+	@PrePersist
+	protected void onCreate() {
+		if (this.createdAt == null) {
+			this.createdAt = LocalDateTime.now();
+		}
+	}
 }

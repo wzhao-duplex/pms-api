@@ -3,6 +3,7 @@ package ca.on.pms.property.service.impl;
 import java.util.List;
 import java.util.UUID;
 
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,118 +25,120 @@ import lombok.RequiredArgsConstructor;
 @Transactional
 public class PropertyServiceImpl implements PropertyService {
 
-    private final PropertyRepository propertyRepository;
-    private final OrganizationRepository organizationRepository;
+	private final PropertyRepository propertyRepository;
+	private final OrganizationRepository organizationRepository;
 
-    // Helper to get current user
-    private UserPrincipal getCurrentUser() {
-        return (UserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-    }
+	private UserPrincipal getCurrentUser() {
+		return (UserPrincipal) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+	}
 
-    @Override
-    public PropertyResponse create(PropertyCreateRequest request) {
-        UserPrincipal currentUser = getCurrentUser();
-        UUID userOrgId = currentUser.getOrgId();
+	// ==========================================
+	// CREATE
+	// ==========================================
+	@Override
+	public PropertyResponse create(PropertyCreateRequest request) {
+		UserPrincipal currentUser = getCurrentUser();
 
-        if (userOrgId == null) {
-            throw new IllegalStateException("User does not belong to an organization");
-        }
+		// Safety check: User must be in an org
+		if (currentUser.getOrgId() == null) {
+			throw new IllegalStateException("User is not associated with an organization.");
+		}
 
-        OrganizationEntity org = organizationRepository.findById(userOrgId)
-                .orElseThrow(() -> new IllegalArgumentException("Organization not found"));
+		// We use reference here to avoid a DB select if we trust the ID (optional
+		// optimization)
+		// But finding it ensures it exists.
+		OrganizationEntity org = organizationRepository.findById(currentUser.getOrgId())
+				.orElseThrow(() -> new IllegalStateException("Organization not found"));
 
-        PropertyEntity entity = PropertyEntity.builder()
-                .organization(org)
-                .address(request.getAddress())
-                .city(request.getCity())
-                .province(request.getProvince())
-                .postalCode(request.getPostalCode())
-                .propertyType(request.getPropertyType())
-                .ownershipPercent(request.getOwnershipPercent())
-                .selfUsePercent(request.getSelfUsePercent())
-                .managementCompany(request.getManagementCompany())
-                .createdAt(java.time.LocalDateTime.now())
-                .build();
+		PropertyEntity entity = PropertyEntity.builder().organization(org).address(request.getAddress())
+				.city(request.getCity()).province(request.getProvince()).postalCode(request.getPostalCode())
+				.propertyType(request.getPropertyType()).ownershipPercent(request.getOwnershipPercent())
+				.selfUsePercent(request.getSelfUsePercent()).managementCompany(request.getManagementCompany())
+				// .createdAt is handled by @PrePersist in Entity
+				.build();
 
-        return toResponse(propertyRepository.save(entity));
-    }
+		return toResponse(propertyRepository.save(entity));
+	}
 
-    @Override
-    public PropertyResponse update(UUID propertyId, PropertyUpdateRequest request) {
-        PropertyEntity entity = propertyRepository.findById(propertyId)
-                .orElseThrow(() -> new ResourceNotFoundException("Property not found"));
+	// ==========================================
+	// UPDATE
+	// ==========================================
+	@Override
+	public PropertyResponse update(UUID propertyId, PropertyUpdateRequest request) {
+		PropertyEntity entity = propertyRepository.findById(propertyId)
+				.orElseThrow(() -> new ResourceNotFoundException("Property not found with id: " + propertyId));
 
-        // Optional: Security check to ensure user owns this property
-        UserPrincipal currentUser = getCurrentUser();
-        if (!entity.getOrganization().getOrgId().equals(currentUser.getOrgId())) {
-             throw new SecurityException("Access Denied");
-        }
+		validateOwnership(entity);
 
-        entity.setAddress(request.getAddress());
-        entity.setCity(request.getCity());
-        entity.setProvince(request.getProvince());
-        entity.setPostalCode(request.getPostalCode());
-        entity.setPropertyType(request.getPropertyType());
-        entity.setOwnershipPercent(request.getOwnershipPercent());
-        entity.setSelfUsePercent(request.getSelfUsePercent());
-        entity.setManagementCompany(request.getManagementCompany());
+		entity.setAddress(request.getAddress());
+		entity.setCity(request.getCity());
+		entity.setProvince(request.getProvince());
+		entity.setPostalCode(request.getPostalCode());
+		entity.setPropertyType(request.getPropertyType());
+		entity.setOwnershipPercent(request.getOwnershipPercent());
+		entity.setSelfUsePercent(request.getSelfUsePercent());
+		entity.setManagementCompany(request.getManagementCompany());
 
-        PropertyEntity updated = propertyRepository.save(entity);
-        return toResponse(updated);
-    }
+		return toResponse(propertyRepository.save(entity));
+	}
 
-    @Override
-    @Transactional(readOnly = true)
-    public PropertyResponse getById(UUID propertyId) {
-        PropertyEntity entity = propertyRepository.findById(propertyId)
-                .orElseThrow(() -> new ResourceNotFoundException("Property not found"));
+	// ==========================================
+	// GET ONE
+	// ==========================================
+	@Override
+	@Transactional(readOnly = true)
+	public PropertyResponse getById(UUID propertyId) {
+		PropertyEntity entity = propertyRepository.findById(propertyId)
+				.orElseThrow(() -> new ResourceNotFoundException("Property not found with id: " + propertyId));
 
-        // Security check
-        UserPrincipal currentUser = getCurrentUser();
-        if (!entity.getOrganization().getOrgId().equals(currentUser.getOrgId())) {
-             throw new SecurityException("Access Denied");
-        }
+		validateOwnership(entity);
 
-        return toResponse(entity);
-    }
+		return toResponse(entity);
+	}
 
-    @Override
-    @Transactional(readOnly = true)
-    public List<PropertyResponse> listPropertiesForCurrentUser() {
-        UserPrincipal currentUser = getCurrentUser();
-        // Automatically filter by the logged-in user's Organization ID
-        return propertyRepository.findByOrganization_OrgId(currentUser.getOrgId())
-                .stream()
-                .map(this::toResponse)
-                .toList();
-    }
+	// ==========================================
+	// LIST ALL (Per Org)
+	// ==========================================
+	@Override
+	@Transactional(readOnly = true)
+	public List<PropertyResponse> listPropertiesForCurrentUser() {
+		UserPrincipal currentUser = getCurrentUser();
+		return propertyRepository.findByOrganization_OrgId(currentUser.getOrgId()).stream().map(this::toResponse)
+				.toList();
+	}
 
-    @Override
-    public void delete(UUID propertyId) {
-        // You should also fetch before delete to check permissions
-        PropertyEntity entity = propertyRepository.findById(propertyId)
-                .orElseThrow(() -> new ResourceNotFoundException("Property not found"));
-        
-        UserPrincipal currentUser = getCurrentUser();
-        if (!entity.getOrganization().getOrgId().equals(currentUser.getOrgId())) {
-             throw new SecurityException("Access Denied");
-        }
+	// ==========================================
+	// DELETE
+	// ==========================================
+	@Override
+	public void delete(UUID propertyId) {
+		PropertyEntity entity = propertyRepository.findById(propertyId)
+				.orElseThrow(() -> new ResourceNotFoundException("Property not found with id: " + propertyId));
 
-        propertyRepository.deleteById(propertyId);
-    }
+		validateOwnership(entity);
 
-    private PropertyResponse toResponse(PropertyEntity e) {
-        return PropertyResponse.builder()
-                .propertyId(e.getPropertyId())
-                .orgId(e.getOrganization().getOrgId())
-                .address(e.getAddress())
-                .city(e.getCity())
-                .province(e.getProvince())
-                .postalCode(e.getPostalCode())
-                .propertyType(e.getPropertyType())
-                .ownershipPercent(e.getOwnershipPercent())
-                .selfUsePercent(e.getSelfUsePercent())
-                .managementCompany(e.getManagementCompany())
-                .build();
-    }
+		propertyRepository.delete(entity);
+	}
+
+	// ==========================================
+	// HELPERS
+	// ==========================================
+
+	/**
+	 * Prevents Horizontal Privilege Escalation. Users from Org A cannot touch
+	 * Properties of Org B.
+	 */
+	private void validateOwnership(PropertyEntity entity) {
+		UserPrincipal currentUser = getCurrentUser();
+		if (!entity.getOrganization().getOrgId().equals(currentUser.getOrgId())) {
+			throw new AccessDeniedException("You do not have permission to access this property.");
+		}
+	}
+
+	private PropertyResponse toResponse(PropertyEntity e) {
+		return PropertyResponse.builder().propertyId(e.getPropertyId()).orgId(e.getOrganization().getOrgId())
+				.address(e.getAddress()).city(e.getCity()).province(e.getProvince()).postalCode(e.getPostalCode())
+				.propertyType(e.getPropertyType()).ownershipPercent(e.getOwnershipPercent())
+				.selfUsePercent(e.getSelfUsePercent()).managementCompany(e.getManagementCompany()).build();
+	}
 }
