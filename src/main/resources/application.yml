@@ -26,6 +26,8 @@ aws:
     region: us-east-2
     s3:
         bucket: my-pms-bucket-2025
+    access-key: ${AWS_ACCESS_KEY_ID}
+    secret-key:  ${AWS_SECRET_ACCESS_KEY}
 
 logging:
     level:

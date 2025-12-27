@@ -54,15 +54,21 @@ public class TenantController {
 		return ResponseEntity.noContent().build();
 	}
 
+	@GetMapping("/{id}/documents")
+	public ResponseEntity<List<TenantDocumentResponse>> listDocuments(@PathVariable UUID id) {
+		return ResponseEntity.ok(tenantService.listDocuments(id));
+	}
+
 	@PostMapping("/{id}/documents")
 	public ResponseEntity<TenantDocumentResponse> uploadDocument(@PathVariable UUID id,
 			@RequestParam("file") MultipartFile file, @RequestParam("documentType") String documentType) {
 		return ResponseEntity.ok(tenantService.uploadDocument(id, file, documentType));
 	}
 
-	@GetMapping("/documents/{id}/download")
-	public ResponseEntity<byte[]> downloadTenantDocument(@PathVariable UUID id) {
-		DownloadedFile file = tenantService.downloadTenantDocument(id);
+	@GetMapping("/documents/{documentId}/download")
+	public ResponseEntity<byte[]> downloadTenantDocument(@PathVariable UUID documentId) {
+		DownloadedFile file = tenantService.downloadTenantDocument(documentId);
+
 		return ResponseEntity.ok()
 				.header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.fileName() + "\"")
 				.contentType(MediaType.parseMediaType(file.contentType())).body(file.data());

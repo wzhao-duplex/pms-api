@@ -145,6 +145,22 @@ public class TenantServiceImpl implements TenantService {
 	}
 
 	// =================================================================
+	// LIST DOCUMENT
+	// =================================================================
+	@Override
+	@Transactional(readOnly = true)
+	public List<TenantDocumentResponse> listDocuments(UUID tenantId) {
+		TenantEntity tenant = tenantRepository.findById(tenantId)
+				.orElseThrow(() -> new ResourceNotFoundException("Tenant not found"));
+
+		// ✅ Security Check
+		validateTenantAccess(tenant);
+
+		// Convert Entities to DTOs
+		return tenant.getDocuments().stream().map(TenantDocumentResponse::from).collect(Collectors.toList());
+	}
+
+	// =================================================================
 	// UPLOAD DOCUMENT
 	// =================================================================
 	@Override

@@ -21,6 +21,8 @@ public interface TenantService {
 	// ✅ NEW: List all tenants for the current user's organization
 	List<TenantDto> listAll();
 
+	List<TenantDocumentResponse> listDocuments(UUID tenantId);
+
 	TenantDocumentResponse uploadDocument(UUID tenantId, MultipartFile file, String documentType);
 
 	DownloadedFile downloadTenantDocument(UUID documentId);
