@@ -42,6 +42,9 @@ public class PropertyExpenseEntity {
 	@Column(length = 500)
 	private String notes;
 
+	@Column(name = "tax_code")
+	private String taxCode; // Stores '8521', '9180', etc.
+
 	@Column(name = "created_at", updatable = false)
 	private LocalDateTime createdAt;
 

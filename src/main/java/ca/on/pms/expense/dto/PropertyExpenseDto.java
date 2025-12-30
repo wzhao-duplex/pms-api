@@ -37,4 +37,6 @@ public class PropertyExpenseDto {
 	private Integer taxYear;
 
 	private String notes;
+
+	private String taxCode;
 }
