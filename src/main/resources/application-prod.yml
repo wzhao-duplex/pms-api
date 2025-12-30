@@ -1,31 +1,44 @@
 spring:
-    datasource:
-        url: jdbc:postgresql://pms-db.cubow0oekmh7.us-east-1.rds.amazonaws.com:5432/pms-db
-        username: pms_user
-        password: postgres123!
-        driver-class-name: org.postgresql.Driver
+  datasource:
+    url: jdbc:postgresql://pms-db.cubow0oekmh7.us-east-1.rds.amazonaws.com:5432/pms-db
+    username: pms_user
+    password: postgres123!
+    driver-class-name: org.postgresql.Driver
 
-    jpa:
-        hibernate:
-            ddl-auto: validate
-        show-sql: true
-        properties:
-            hibernate:
-                format_sql: true
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
 
-    flyway:
-        enabled: true
-        baseline-on-migrate: true
-        user: pms_user
-        password: postgres123!
+  # ✅ FIXED: mail is now correctly under 'spring' (not inside jpa)
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME}  # Set in Environment Variables
+    password: ${MAIL_PASSWORD}  # Set in Environment Variables
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    user: pms_user
+    password: postgres123!
 
 aws:
-    region: us-east-2
-    s3:
-        bucket: my-pms-bucket-2025
-    access-key: ${AWS_ACCESS_KEY_ID}
-    secret-key:  ${AWS_SECRET_ACCESS_KEY}
+  region: us-east-2
+  s3:
+    bucket: my-pms-bucket-2025
+  access-key: ${AWS_ACCESS_KEY_ID}
+  secret-key: ${AWS_SECRET_ACCESS_KEY}
 
 logging:
-    level:
-        org.flywaydb: INFO
+  level:
+    org.flywaydb: INFO
