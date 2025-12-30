@@ -16,6 +16,18 @@ spring:
             hibernate:
                 format_sql: true
 
+    mail:
+        host: smtp.gmail.com
+        port: 587
+        username: ${MAIL_USERNAME}  # Set in Environment Variables
+        password: ${MAIL_PASSWORD}  # Set in Environment Variables (Use App Password for Gmail)
+        properties:
+            mail:
+                smtp:
+                    auth: true
+                    starttls:
+                        enable: true
+
     flyway:
         enabled: true
         baseline-on-migrate: true
