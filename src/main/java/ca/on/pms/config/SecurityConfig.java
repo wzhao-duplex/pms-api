@@ -57,18 +57,26 @@ public class SecurityConfig {
 
 	@Bean
 	public UrlBasedCorsConfigurationSource corsConfigurationSource() {
-		CorsConfiguration config = new CorsConfiguration();
+	    CorsConfiguration config = new CorsConfiguration();
 
-		// ✅ ALLOW EVERYTHING (For Dev/Staging)
-		// This fixes the issue regardless of the specific S3 URL or port
-		config.setAllowedOriginPatterns(List.of("*"));
+	    config.setAllowedOrigins(List.of(
+	        "http://localhost:4200",
+	        "http://pms-ui-frontend.s3-website-us-east-1.amazonaws.com"
+	    ));
 
-		config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"));
-		config.setAllowedHeaders(List.of("*"));
-		config.setAllowCredentials(true);
+	    config.setAllowedMethods(List.of(
+	        "GET", "POST", "PUT", "DELETE", "OPTIONS"
+	    ));
 
-		UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
-		source.registerCorsConfiguration("/**", config);
-		return source;
+	    config.setAllowedHeaders(List.of(
+	        "Authorization",
+	        "Content-Type"
+	    ));
+
+	    config.setAllowCredentials(true);
+
+	    UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+	    source.registerCorsConfiguration("/**", config);
+	    return source;
 	}
 }
