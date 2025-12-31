@@ -1,3 +1,6 @@
+server:
+    # Use the port AWS gives us, or default to 8080 locally
+    port: ${PORT:8080}
 spring:
   datasource:
     url: jdbc:postgresql://pms-db.cubow0oekmh7.us-east-1.rds.amazonaws.com:5432/pms-db
