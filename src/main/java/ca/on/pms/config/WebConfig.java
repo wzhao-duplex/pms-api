@@ -18,7 +18,7 @@ public class WebConfig {
                         		"http://localhost:4200",
                         		"http://pms-ui-frontend.s3-website-us-east-1.amazonaws.com"
                         	)
-                        .allowedMethods("GET", "POST", "PUT", "DELETE")
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
                         .allowCredentials(true);
             }
         };
