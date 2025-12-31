@@ -28,5 +28,5 @@ jobs:
           application_name: pms-api
           environment_name: pms-api-env
           version_label: ${{ github.sha }}-${{ github.run_number }}
-          region: us-east-2
+          region: us-east-1
           deployment_package: target/pms-api-0.0.1-SNAPSHOT.jar
