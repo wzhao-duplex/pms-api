@@ -32,7 +32,7 @@ public class SecurityConfig {
 																											// Bean
 																											// below
 				.sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-				.authorizeHttpRequests(auth -> auth.requestMatchers("/api/auth/**", "/actuator/**", "/error")
+				.authorizeHttpRequests(auth -> auth.requestMatchers("/api/auth/**", "/actuator/**", "/error", "/api/echo")
 						.permitAll().requestMatchers(org.springframework.http.HttpMethod.OPTIONS, "/**").permitAll() //  Allow AL OPTIONS requests (Pre-flight)
 						.anyRequest().authenticated())
 				.addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
