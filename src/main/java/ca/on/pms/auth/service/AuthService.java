@@ -20,6 +20,9 @@ import ca.on.pms.security.UserPrincipal;
 import ca.on.pms.user.entity.UserEntity;
 import ca.on.pms.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import java.util.Random;
+import ca.on.pms.auth.dto.VerifyRequest;
+import ca.on.pms.notification.service.EmailService;
 
 @Service
 @RequiredArgsConstructor
@@ -29,37 +32,78 @@ public class AuthService {
 	private final OrganizationRepository orgRepository;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtUtils jwtUtils;
+	private final EmailService emailService;
 
 	private final TokenBlacklistRepository blacklistRepository;
 
-	@Transactional
-	public AuthResponse register(RegisterRequest request) {
-		if (userRepository.existsByEmail(request.email())) {
-			throw new RuntimeException("Email already exists");
-		}
+    @Transactional
+    public AuthResponse register(RegisterRequest request) {
+        if (userRepository.existsByEmail(request.email())) {
+            throw new RuntimeException("Email already exists");
+        }
 
-		// 1. Create User (Initially no Org ID)
-		UserEntity user = UserEntity.builder().email(request.email())
-				.passwordHash(passwordEncoder.encode(request.password())).fullName(request.fullName()).role("OWNER")
-				.status("ACTIVE").build();
+        // 1. Generate 6-Digit Code
+        String code = String.valueOf(new Random().nextInt(900000) + 100000);
 
-		UserEntity savedUser = userRepository.save(user);
+        // 2. Create User with PENDING status
+        UserEntity user = UserEntity.builder()
+                .email(request.email())
+                .passwordHash(passwordEncoder.encode(request.password()))
+                .fullName(request.fullName())
+                .role("OWNER")
+                .status("PENDING") // ✅ Default to PENDING
+                .verificationCode(code) // ✅ Save Code
+                .verificationExpiry(LocalDateTime.now().plusMinutes(15)) // ✅ Valid for 15 mins
+                .build();
+        
+        UserEntity savedUser = userRepository.save(user);
 
-		// 2. Create Organization (1 Year Free)
-		OrganizationEntity org = OrganizationEntity.builder().orgName(request.orgName()).ownerUser(savedUser)
-				.subscriptionStart(LocalDate.now()).subscriptionEnd(LocalDate.now().plusYears(1)).status("ACTIVE")
-				.build();
+        // 3. Create Org (Same as before)
+        OrganizationEntity org = OrganizationEntity.builder()
+                .orgName(request.orgName())
+                .ownerUser(savedUser)
+                .subscriptionStart(LocalDate.now())
+                .subscriptionEnd(LocalDate.now().plusYears(1))
+                .status("ACTIVE")
+                .build();
+        OrganizationEntity savedOrg = orgRepository.save(org);
+        savedUser.setOrgId(savedOrg.getOrgId());
+        userRepository.save(savedUser);
 
-		OrganizationEntity savedOrg = orgRepository.save(org);
+        // 4. Send Email
+        emailService.sendSimpleEmail(
+            user.getEmail(), 
+            "Verify your PMS Account", 
+            "Welcome! Your verification code is: " + code + "\nIt expires in 15 minutes."
+        );
 
-		// 3. Link User to Organization
-		savedUser.setOrgId(savedOrg.getOrgId());
-		userRepository.save(savedUser);
+        // Return empty token or specific message indicating verification needed
+        return new AuthResponse("VERIFY_NEEDED"); 
+    }
 
-		// 4. Generate Token
-		String token = jwtUtils.generateToken(UserPrincipal.create(savedUser));
-		return new AuthResponse(token);
-	}
+    @Transactional
+    public void verify(VerifyRequest request) {
+        UserEntity user = userRepository.findByEmail(request.email())
+                .orElseThrow(() -> new RuntimeException("User not found"));
+
+        if ("ACTIVE".equals(user.getStatus())) {
+            return; // Already verified
+        }
+
+        if (user.getVerificationExpiry().isBefore(LocalDateTime.now())) {
+            throw new RuntimeException("Verification code expired. Please register again or request new code.");
+        }
+
+        if (!user.getVerificationCode().equals(request.code())) {
+            throw new RuntimeException("Invalid verification code");
+        }
+
+        // Success
+        user.setStatus("ACTIVE");
+        user.setVerificationCode(null);
+        user.setVerificationExpiry(null);
+        userRepository.saveAndFlush(user);
+    }
 
 	public AuthResponse login(AuthRequest request) {
 		UserEntity user = userRepository.findByEmail(request.email())
@@ -68,6 +112,11 @@ public class AuthService {
 		if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
 			throw new RuntimeException("Invalid credentials");
 		}
+
+        // ✅ Check if Verified
+        if ("PENDING".equals(user.getStatus())) {
+            throw new RuntimeException("Account is not verified. Please check your email.");
+        }
 
 		// Subscription Check
 		if (user.getOrgId() != null) {
